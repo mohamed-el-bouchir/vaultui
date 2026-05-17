@@ -2,7 +2,6 @@
 
 A secure, minimal, and interactive TUI note-taking application built in Go.
 
-![VaultUI](https://via.placeholder.com/800x400.png?text=VaultUI+TUI+Screenshot)
 <img width="800" height="600" alt="image" src="https://github.com/user-attachments/assets/5f03e0fa-ea9a-48d0-a2f3-945988cd0066" />
 
 
