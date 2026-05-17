@@ -18,6 +18,20 @@ VaultUI manages multiple "notebooks" (vaults), encrypts notes on a per-notebook 
 
 ## Install
 
+### Pre-compiled Binaries (Linux / macOS)
+
+You can download the pre-compiled binaries directly from the releases page:
+
+```bash
+# For amd64 systems (x86_64)	
+curl -sL https://github.com/mohamed-el-bouchir/vaultui/releases/latest/download/vaultui_linux_amd64.tar.gz | tar xz
+sudo mv vaultui /usr/local/bin/
+
+# For arm64 systems
+curl -sL https://github.com/mohamed-el-bouchir/vaultui/releases/latest/download/vaultui_linux_arm64.tar.gz | tar xz
+sudo mv vaultui /usr/local/bin/
+```
+
 ### From source
 
 ```bash
