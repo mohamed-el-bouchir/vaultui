@@ -21,7 +21,7 @@ VaultUI manages multiple "notebooks" (vaults), encrypts notes on a per-notebook 
 
 ```bash
 # Clone the repository
-git clone git@github.com:your-username/vaultui.git
+git clone git@github.com:mohamed-el-bouchir/vaultui.git
 cd vaultui
 
 # Build the binary
@@ -34,7 +34,7 @@ sudo mv vaultui /usr/local/bin/
 ### Via Go Install
 
 ```bash
-go install github.com/your-username/vaultui@latest
+go install github.com/mohamed-el-bouchir/vaultui@latest
 ```
 
 ## Usage
