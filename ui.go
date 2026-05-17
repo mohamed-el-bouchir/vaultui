@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
@@ -94,13 +95,31 @@ func (m *model) loadNotebooks() {
 	var items []list.Item
 	for _, e := range entries {
 		if e.IsDir() && e.Name() != ".archive" {
-			items = append(items, item{title: e.Name(), desc: "Notebook (d: delete, a: archive, c: change password)"})
+			items = append(items, item{title: e.Name(), desc: "Notebook"})
 		}
 	}
 	items = append(items, item{title: "+ Create New Notebook", desc: "Create a new encrypted directory"})
 
 	m.list.SetItems(items)
-	m.list.Title = "Notebooks (s: Settings)"
+	m.list.Title = "Notebooks"
+	m.list.AdditionalShortHelpKeys = func() []key.Binding {
+		return []key.Binding{
+			key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "settings")),
+			key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "del")),
+			key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "arch")),
+			key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "pwd")),
+			key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
+		}
+	}
+	m.list.AdditionalFullHelpKeys = func() []key.Binding {
+		return []key.Binding{
+			key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "settings")),
+			key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete")),
+			key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "archive")),
+			key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "change password")),
+			key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
+		}
+	}
 }
 
 func (m *model) loadNotes() {
@@ -124,6 +143,20 @@ func (m *model) loadNotes() {
 
 	m.list.SetItems(items)
 	m.list.Title = "Notes in " + m.activeVault
+	m.list.AdditionalShortHelpKeys = func() []key.Binding {
+		return []key.Binding{
+			key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "new")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "lock")),
+			key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
+		}
+	}
+	m.list.AdditionalFullHelpKeys = func() []key.Binding {
+		return []key.Binding{
+			key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "new note")),
+			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "lock vault")),
+			key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
+		}
+	}
 }
 
 func (m model) Init() tea.Cmd {
@@ -197,6 +230,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if keyMsg, ok := msg.(tea.KeyMsg); ok && m.list.FilterState() != list.Filtering {
 			switch keyMsg.String() {
+			case "q":
+				return m, tea.Quit
 			case "s":
 				m.state = stateSettings
 				m.list.SetItems([]list.Item{
@@ -210,11 +245,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					title := selected.(item).title
 					if title != "+ Create New Notebook" {
 						m.activeVault = title
-						m.state = stateDeleteAuth
-						m.textInput.Reset()
-						m.textInput.Placeholder = "Password to delete " + m.activeVault
-						m.textInput.EchoMode = textinput.EchoPassword
-						m.textInput.Focus()
+						vaultPath := filepath.Join(m.config.VaultRoot, m.activeVault)
+						if _, valid, _ := loadVault(vaultPath, ""); valid {
+							os.RemoveAll(vaultPath)
+							m.activeVault = ""
+							m.loadNotebooks()
+						} else {
+							m.state = stateDeleteAuth
+							m.textInput.Reset()
+							m.textInput.Placeholder = "Password to delete " + m.activeVault
+							m.textInput.EchoMode = textinput.EchoPassword
+							m.textInput.Focus()
+						}
 					}
 				}
 			case "c":
@@ -223,11 +265,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					title := selected.(item).title
 					if title != "+ Create New Notebook" {
 						m.activeVault = title
-						m.state = stateChangePasswordAuth
-						m.textInput.Reset()
-						m.textInput.Placeholder = "Current password for " + m.activeVault
-						m.textInput.EchoMode = textinput.EchoPassword
-						m.textInput.Focus()
+						vaultPath := filepath.Join(m.config.VaultRoot, m.activeVault)
+						if _, valid, _ := loadVault(vaultPath, ""); valid {
+							m.tempPassword = ""
+							m.state = stateChangePasswordNew
+							m.textInput.Reset()
+							m.textInput.Placeholder = "New password for " + m.activeVault
+							m.textInput.EchoMode = textinput.EchoPassword
+							m.textInput.Focus()
+						} else {
+							m.state = stateChangePasswordAuth
+							m.textInput.Reset()
+							m.textInput.Placeholder = "Current password for " + m.activeVault
+							m.textInput.EchoMode = textinput.EchoPassword
+							m.textInput.Focus()
+						}
 					}
 				}
 			case "a":
@@ -255,18 +307,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.textInput.Focus()
 					} else {
 						m.activeVault = title
-						// Check if vault has metadata
 						vaultPath := filepath.Join(m.config.VaultRoot, m.activeVault)
 						metaPath := filepath.Join(vaultPath, ".vault_meta")
 						if _, err := os.Stat(metaPath); os.IsNotExist(err) {
-							// Needs setup
 							m.state = stateNewNotebookPassword
 							m.textInput.Reset()
 							m.textInput.Placeholder = "Set Password for " + m.activeVault
 							m.textInput.EchoMode = textinput.EchoPassword
 							m.textInput.Focus()
+						} else if key, valid, _ := loadVault(vaultPath, ""); valid {
+							m.activeVaultKey = key
+							m.state = stateNoteList
+							m.loadNotes()
 						} else {
-							// Needs auth
 							m.state = stateAuth
 							m.textInput.Reset()
 							m.textInput.Placeholder = "Password"
@@ -385,6 +438,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.activeVault = ""
 				m.state = stateNotebookList
 				m.loadNotebooks()
+			} else if msg.String() == "q" && m.list.FilterState() != list.Filtering {
+				return m, tea.Quit
 			} else if msg.String() == "enter" {
 				selected := m.list.SelectedItem()
 				if selected != nil {
@@ -443,6 +498,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		if keyMsg, ok := msg.(tea.KeyMsg); ok && m.list.FilterState() != list.Filtering {
 			switch keyMsg.String() {
+			case "q":
+				return m, tea.Quit
 			case "esc":
 				m.state = stateNotebookList
 				m.loadNotebooks()
