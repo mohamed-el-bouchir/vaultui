@@ -26,3 +26,21 @@ changelog:
     exclude:
       - '^docs:'
       - '^test:'
+
+nfpms:
+  - vendor: "Mohamed EL BOUCHIR"
+    homepage: "https://github.com/mohamed-el-bouchir/vaultui"
+    maintainer: "Mohamed EL BOUCHIR"
+    description: "A secure, minimal, and interactive TUI note-taking application built in Go."
+    license: "MIT"
+    formats:
+      - deb
+      - rpm
+    bindir: /usr/local/bin
+
+brews:
+  - repository:
+      owner: mohamed-el-bouchir
+      name: homebrew-tap
+    description: "A secure, minimal, and interactive TUI note-taking application built in Go."
+    homepage: "https://github.com/mohamed-el-bouchir/vaultui"
