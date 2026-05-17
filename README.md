@@ -2,7 +2,9 @@
 
 A secure, minimal, and interactive TUI note-taking application built in Go.
 
-![VaultUI](https://via.placeholder.com/800x400.png?text=VaultUI+TUI+Screenshot) *(Placeholder for screenshot)*
+![VaultUI](https://via.placeholder.com/800x400.png?text=VaultUI+TUI+Screenshot)
+<img width="800" height="600" alt="image" src="https://github.com/user-attachments/assets/5f03e0fa-ea9a-48d0-a2f3-945988cd0066" />
+
 
 VaultUI manages multiple "notebooks" (vaults), encrypts notes on a per-notebook basis, and seamlessly integrates with your favorite terminal text editor (`micro`, `nano`, `vim`, etc.) to write and edit notes, all while keeping your data securely encrypted at rest.
 
