@@ -18,13 +18,6 @@ VaultUI manages multiple "notebooks" (vaults), encrypts notes on a per-notebook 
 
 ## Install
 
-### Homebrew (macOS / Linux)
-
-```bash
-brew tap mohamed-el-bouchir/homebrew-tap
-brew install vaultui
-```
-
 ### apt (Debian / Ubuntu)
 
 Download the `.deb` package from the [releases page](https://github.com/mohamed-el-bouchir/vaultui/releases) and install it:

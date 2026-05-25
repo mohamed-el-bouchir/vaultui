@@ -11,15 +11,11 @@ builds:
       - amd64
       - arm64
 archives:
-  - format: tar.gz
-    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
-    format_overrides:
-      - goos: windows
-        format: zip
+  - name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
 checksum:
   name_template: 'checksums.txt'
 snapshot:
-  version_template: "{{ incpatch .Version }}-next"
+  name_template: "{{ incpatch .Version }}-next"
 changelog:
   sort: asc
   filters:
@@ -37,10 +33,3 @@ nfpms:
       - deb
       - rpm
     bindir: /usr/local/bin
-
-brews:
-  - repository:
-      owner: mohamed-el-bouchir
-      name: homebrew-tap
-    description: "A secure, minimal, and interactive TUI note-taking application built in Go."
-    homepage: "https://github.com/mohamed-el-bouchir/vaultui"
