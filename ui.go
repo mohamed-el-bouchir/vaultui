@@ -10,7 +10,9 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -30,6 +32,11 @@ const (
 	stateChangePasswordAuth
 	stateChangePasswordNew
 	stateChangePasswordConfirm
+	stateDeletePasswordlessConfirm
+	stateRenameNotebook
+	stateRenameNote
+	stateDeleteNoteConfirm
+	stateReadNote
 )
 
 type item struct {
@@ -45,7 +52,10 @@ type model struct {
 	config         *Config
 	list           list.Model
 	textInput      textinput.Model
+	viewport       viewport.Model
+	renderer       *glamour.TermRenderer
 	activeVault    string
+	activeNote     string
 	activeVaultKey []byte
 	tempPassword   string
 	newPassword    string
@@ -61,10 +71,14 @@ func initialModel(cfg *Config) model {
 	l := list.New(nil, list.NewDefaultDelegate(), 0, 0)
 	l.DisableQuitKeybindings()
 
+	vp := viewport.New(0, 0)
+	vp.Style = lipgloss.NewStyle().Margin(1, 2)
+
 	m := model{
 		config:    cfg,
 		textInput: ti,
 		list:      l,
+		viewport:  vp,
 	}
 
 	if cfg == nil {
@@ -108,6 +122,7 @@ func (m *model) loadNotebooks() {
 			key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "del")),
 			key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "arch")),
 			key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "pwd")),
+			key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "rename")),
 			key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
 		}
 	}
@@ -117,6 +132,7 @@ func (m *model) loadNotebooks() {
 			key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete")),
 			key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "archive")),
 			key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "change password")),
+			key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "rename")),
 			key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
 		}
 	}
@@ -146,6 +162,9 @@ func (m *model) loadNotes() {
 	m.list.AdditionalShortHelpKeys = func() []key.Binding {
 		return []key.Binding{
 			key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "new")),
+			key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "del")),
+			key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "rename")),
+			key.NewBinding(key.WithKeys("l"), key.WithHelp("l", "read")),
 			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "lock")),
 			key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
 		}
@@ -153,6 +172,9 @@ func (m *model) loadNotes() {
 	m.list.AdditionalFullHelpKeys = func() []key.Binding {
 		return []key.Binding{
 			key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "new note")),
+			key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete note")),
+			key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "rename note")),
+			key.NewBinding(key.WithKeys("l"), key.WithHelp("l", "read note")),
 			key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "lock vault")),
 			key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
 		}
@@ -172,6 +194,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.windowWidth, m.windowHeight = msg.Width, msg.Height
 		h, v := lipgloss.NewStyle().Margin(1, 2).GetFrameSize()
 		m.list.SetSize(msg.Width-h, msg.Height-v)
+		m.viewport.Width = msg.Width - h
+		m.viewport.Height = msg.Height - v
+
+		m.renderer, _ = glamour.NewTermRenderer(
+			glamour.WithAutoStyle(),
+			glamour.WithWordWrap(m.viewport.Width),
+		)
 
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
@@ -247,9 +276,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.activeVault = title
 						vaultPath := filepath.Join(m.config.VaultRoot, m.activeVault)
 						if _, valid, _ := loadVault(vaultPath, ""); valid {
-							os.RemoveAll(vaultPath)
-							m.activeVault = ""
-							m.loadNotebooks()
+							m.state = stateDeletePasswordlessConfirm
 						} else {
 							m.state = stateDeleteAuth
 							m.textInput.Reset()
@@ -257,6 +284,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							m.textInput.EchoMode = textinput.EchoPassword
 							m.textInput.Focus()
 						}
+					}
+				}
+			case "r":
+				selected := m.list.SelectedItem()
+				if selected != nil {
+					title := selected.(item).title
+					if title != "+ Create New Notebook" {
+						m.activeVault = title
+						m.state = stateRenameNotebook
+						m.textInput.Reset()
+						m.textInput.Placeholder = "New name for " + m.activeVault
+						m.textInput.EchoMode = textinput.EchoNormal
+						m.textInput.Focus()
 					}
 				}
 			case "c":
@@ -453,6 +493,57 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					} else {
 						notePath := filepath.Join(m.config.VaultRoot, m.activeVault, title)
 						return m, openEditor(m.config.Editor, notePath, m.activeVaultKey)
+					}
+				}
+			} else if msg.String() == "l" && m.list.FilterState() != list.Filtering {
+				selected := m.list.SelectedItem()
+				if selected != nil {
+					title := selected.(item).title
+					if title != "+ Create New Note" {
+						notePath := filepath.Join(m.config.VaultRoot, m.activeVault, title)
+						encryptedContent, err := os.ReadFile(notePath)
+						if err == nil {
+							decrypted, err := decrypt(encryptedContent, m.activeVaultKey)
+							if err == nil {
+								if m.renderer == nil {
+									m.renderer, _ = glamour.NewTermRenderer(
+										glamour.WithAutoStyle(),
+										glamour.WithWordWrap(m.viewport.Width),
+									)
+								}
+								out, _ := m.renderer.Render(string(decrypted))
+								m.viewport.SetContent(out)
+								m.viewport.GotoTop()
+								m.activeNote = title
+								m.state = stateReadNote
+							} else {
+								m.err = err
+							}
+						} else {
+							m.err = err
+						}
+					}
+				}
+			} else if msg.String() == "d" && m.list.FilterState() != list.Filtering {
+				selected := m.list.SelectedItem()
+				if selected != nil {
+					title := selected.(item).title
+					if title != "+ Create New Note" {
+						m.activeNote = title
+						m.state = stateDeleteNoteConfirm
+					}
+				}
+			} else if msg.String() == "r" && m.list.FilterState() != list.Filtering {
+				selected := m.list.SelectedItem()
+				if selected != nil {
+					title := selected.(item).title
+					if title != "+ Create New Note" {
+						m.activeNote = title
+						m.state = stateRenameNote
+						m.textInput.Reset()
+						m.textInput.Placeholder = "New name for " + m.activeNote + " (without .enc)"
+						m.textInput.EchoMode = textinput.EchoNormal
+						m.textInput.Focus()
 					}
 				}
 			} else if msg.String() == "n" && m.list.FilterState() != list.Filtering {
@@ -653,6 +744,89 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.state = stateNotebookList
 			}
 		}
+
+	case stateDeletePasswordlessConfirm:
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			if keyMsg.String() == "y" || keyMsg.String() == "enter" {
+				vaultPath := filepath.Join(m.config.VaultRoot, m.activeVault)
+				os.RemoveAll(vaultPath)
+				m.activeVault = ""
+				m.state = stateNotebookList
+				m.loadNotebooks()
+			} else if keyMsg.String() == "n" || keyMsg.String() == "esc" {
+				m.activeVault = ""
+				m.state = stateNotebookList
+			}
+		}
+
+	case stateRenameNotebook:
+		m.textInput, cmd = m.textInput.Update(msg)
+		cmds = append(cmds, cmd)
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			if keyMsg.String() == "enter" {
+				newName := m.textInput.Value()
+				if newName != "" {
+					oldPath := filepath.Join(m.config.VaultRoot, m.activeVault)
+					newPath := filepath.Join(m.config.VaultRoot, newName)
+					os.Rename(oldPath, newPath)
+					m.activeVault = ""
+					m.state = stateNotebookList
+					m.loadNotebooks()
+				}
+			} else if keyMsg.String() == "esc" {
+				m.activeVault = ""
+				m.state = stateNotebookList
+			}
+		}
+
+	case stateRenameNote:
+		m.textInput, cmd = m.textInput.Update(msg)
+		cmds = append(cmds, cmd)
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			if keyMsg.String() == "enter" {
+				newName := m.textInput.Value()
+				if newName != "" {
+					if !strings.HasSuffix(newName, ".enc") {
+						newName += ".enc"
+					}
+					oldPath := filepath.Join(m.config.VaultRoot, m.activeVault, m.activeNote)
+					newPath := filepath.Join(m.config.VaultRoot, m.activeVault, newName)
+					os.Rename(oldPath, newPath)
+					m.activeNote = ""
+					m.state = stateNoteList
+					m.loadNotes()
+				}
+			} else if keyMsg.String() == "esc" {
+				m.activeNote = ""
+				m.state = stateNoteList
+			}
+		}
+
+	case stateDeleteNoteConfirm:
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			if keyMsg.String() == "y" || keyMsg.String() == "enter" {
+				notePath := filepath.Join(m.config.VaultRoot, m.activeVault, m.activeNote)
+				os.Remove(notePath)
+				m.activeNote = ""
+				m.state = stateNoteList
+				m.loadNotes()
+			} else if keyMsg.String() == "n" || keyMsg.String() == "esc" {
+				m.activeNote = ""
+				m.state = stateNoteList
+			}
+		}
+
+	case stateReadNote:
+		var cmd tea.Cmd
+		m.viewport, cmd = m.viewport.Update(msg)
+		cmds = append(cmds, cmd)
+
+		if keyMsg, ok := msg.(tea.KeyMsg); ok {
+			if keyMsg.String() == "esc" || keyMsg.String() == "q" {
+				m.activeNote = ""
+				m.state = stateNoteList
+			}
+		}
 	}
 
 	return m, tea.Batch(cmds...)
@@ -664,6 +838,8 @@ func (m model) View() string {
 	}
 
 	switch m.state {
+	case stateReadNote:
+		return fmt.Sprintf("%s\n\n(Press Esc or q to go back)", m.viewport.View())
 	case stateInitVaultRoot:
 		return fmt.Sprintf(
 			"Welcome to VaultUI!\n\nWhere would you like to store your notebooks?\n\n%s\n\n(Press Enter to confirm)",
@@ -736,6 +912,32 @@ func (m model) View() string {
 			"Confirm New Password for %s\n\n%s\n\n(Press Enter to confirm, Esc to go back)",
 			m.activeVault,
 			m.textInput.View(),
+		)
+
+	case stateDeletePasswordlessConfirm:
+		return fmt.Sprintf(
+			"Are you sure you want to permanently delete '%s'?\n\nThis action cannot be undone.\n\n(Press y/Enter to confirm, n/Esc to cancel)",
+			m.activeVault,
+		)
+
+	case stateRenameNotebook:
+		return fmt.Sprintf(
+			"Rename Notebook: %s\n\n%s\n\n(Press Enter to confirm, Esc to go back)",
+			m.activeVault,
+			m.textInput.View(),
+		)
+
+	case stateRenameNote:
+		return fmt.Sprintf(
+			"Rename Note: %s\n\n%s\n\n(Press Enter to confirm, Esc to go back)",
+			m.activeNote,
+			m.textInput.View(),
+		)
+
+	case stateDeleteNoteConfirm:
+		return fmt.Sprintf(
+			"Are you sure you want to permanently delete note '%s'?\n\nThis action cannot be undone.\n\n(Press y/Enter to confirm, n/Esc to cancel)",
+			m.activeNote,
 		)
 	}
 

@@ -13,6 +13,7 @@ VaultUI manages multiple "notebooks" (vaults), encrypts notes on a per-notebook 
 - **Secure Encryption**: Uses `AES-256-GCM` for encrypting your notes and `Argon2` for secure key derivation from your vault passwords.
 - **Per-Notebook Security**: Each notebook has its own password. You unlock it once per session, and the key is securely wiped from memory the moment you exit the notebook.
 - **Native Editor Support**: Temporarily decrypts notes to a RAM-friendly secure file, allowing your native `$EDITOR` (defaults to `micro` or `nano`) to provide syntax highlighting and normal editing flows, before securely re-encrypting upon save.
+- **Read-Only Markdown Preview**: Press `l` to instantly view your encrypted notes beautifully rendered as Markdown directly in the terminal, without needing to spawn an external editor.
 - **Passwordless Vaults**: Need a quick scratchpad? Just hit Enter when creating a vault to create an unencrypted/passwordless notebook.
 - **Archive & Management**: Easily archive or permanently delete notebooks directly from the TUI.
 
@@ -96,9 +97,11 @@ vaultui
 When viewing your list of notebooks:
 
 - **`s`**: Open **Settings** to change the default vault location
-- **`d`**: **Delete** the highlighted notebook (requires password confirmation)
+- **`d`**: **Delete** the highlighted notebook (requires password confirmation, or a yes/no prompt for passwordless vaults)
 - **`a`**: **Archive** the highlighted notebook (moves to a hidden `.archive` folder)
 - **`c`**: **Change Password** for the highlighted notebook (requires old password, re-encrypts all notes with the new one)
+- **`r`**: **Rename** the highlighted notebook
+- **`q`**: **Quit** application
 
 ### Notes View Shortcuts
 
@@ -106,7 +109,11 @@ When inside an unlocked notebook:
 
 - **`n`**: Create a **New Note**
 - **`Enter`**: Open the highlighted note in your `$EDITOR`
+- **`l`**: **Read-Only Mode** (renders Markdown directly in the terminal without spawning an editor)
+- **`r`**: **Rename** the highlighted note
+- **`d`**: **Delete** the highlighted note
 - **`Esc`**: Lock the vault and return to the notebooks list
+- **`q`**: **Quit** application
 
 ## Configuration & Data Storage
 
