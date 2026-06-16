@@ -194,13 +194,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.windowWidth, m.windowHeight = msg.Width, msg.Height
 		h, v := lipgloss.NewStyle().Margin(1, 2).GetFrameSize()
 		m.list.SetSize(msg.Width-h, msg.Height-v)
-		m.viewport.Width = msg.Width - h
+		
+		newVPWidth := msg.Width - h
+		if m.viewport.Width != newVPWidth {
+			m.renderer = nil // invalidate cache on width change
+		}
+		m.viewport.Width = newVPWidth
 		m.viewport.Height = msg.Height - v
-
-		m.renderer, _ = glamour.NewTermRenderer(
-			glamour.WithAutoStyle(),
-			glamour.WithWordWrap(m.viewport.Width),
-		)
 
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" {
@@ -355,10 +355,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							m.textInput.Placeholder = "Set Password for " + m.activeVault
 							m.textInput.EchoMode = textinput.EchoPassword
 							m.textInput.Focus()
-						} else if key, valid, _ := loadVault(vaultPath, ""); valid {
-							m.activeVaultKey = key
-							m.state = stateNoteList
-							m.loadNotes()
+						} else if isVaultPasswordless(vaultPath) {
+							if key, valid, _ := loadVault(vaultPath, ""); valid {
+								m.activeVaultKey = key
+								m.state = stateNoteList
+								m.loadNotes()
+							}
 						} else {
 							m.state = stateAuth
 							m.textInput.Reset()

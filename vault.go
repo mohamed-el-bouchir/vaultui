@@ -9,8 +9,22 @@ import (
 )
 
 type VaultMeta struct {
-	Salt     []byte `json:"salt"`
-	Hash     []byte `json:"hash"` // SHA256 of the Argon2 derived key
+	Salt         []byte `json:"salt"`
+	Hash         []byte `json:"hash"` // SHA256 of the Argon2 derived key
+	Passwordless bool   `json:"passwordless"`
+}
+
+func isVaultPasswordless(vaultPath string) bool {
+	metaPath := filepath.Join(vaultPath, ".vault_meta")
+	metaBytes, err := os.ReadFile(metaPath)
+	if err != nil {
+		return false
+	}
+	var meta VaultMeta
+	if err := json.Unmarshal(metaBytes, &meta); err == nil {
+		return meta.Passwordless
+	}
+	return false
 }
 
 func initVault(vaultPath string, password string) error {
@@ -23,8 +37,9 @@ func initVault(vaultPath string, password string) error {
 	hash := sha256.Sum256(key)
 
 	meta := VaultMeta{
-		Salt: salt,
-		Hash: hash[:],
+		Salt:         salt,
+		Hash:         hash[:],
+		Passwordless: password == "",
 	}
 
 	metaBytes, err := json.Marshal(meta)
@@ -109,8 +124,9 @@ func changeVaultPassword(vaultPath string, oldPassword, newPassword string) erro
 	// 4. save new meta
 	hash := sha256.Sum256(newKey)
 	meta := VaultMeta{
-		Salt: newSalt,
-		Hash: hash[:],
+		Salt:         newSalt,
+		Hash:         hash[:],
+		Passwordless: newPassword == "",
 	}
 	metaBytes, err := json.Marshal(meta)
 	if err != nil {
